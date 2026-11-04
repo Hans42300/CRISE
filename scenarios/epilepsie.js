@@ -14,9 +14,9 @@ const SCENARIO = {
 
   /* Mots utilisés dans le récap et les notifications (toujours en français) */
   recap: {
-    nom: "crise d'épilepsie",   // "Léo : crise d'épilepsie le 03/11…"
-    unite: "Crise",             // "Crise 1 : …", "Crise 2 : …"
-    plusieurs: n => n + " CRISES À LA SUITE"
+    nom: "crise d'épilepsie",   // "Crise d'épilepsie de 14:02 à 14:04 (durée 2 min 10 s)."
+    unite: "Crise",             // "Crise 1 de …", "Crise 2 en cours…"
+    plusieurs: n => n + " crises à la suite"
   },
   /* deQui arrive déjà accordé : "de Léo", "d'Emma", "de l'enfant" */
   notif: {

@@ -433,17 +433,32 @@ function afficherObservations() {
 /* =====================================================================
    RÉCAP (toujours en français : il est destiné aux parents et au SAMU)
    ===================================================================== */
+/* Le récap sert pour le SMS aux proches, la notification de fin et le SAMU.
+   Il doit se lire d'un coup d'œil, par un parent inquiet :
+   des durées en clair ("2 min 10 s", pas "02:10"), pas de MAJUSCULES qui crient,
+   et une phrase rassurante tant que c'est en cours. */
+
+// 130 000 ms → "2 min 10 s" ; 24 000 ms → "24 s"
+function duree(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return s + " s";
+  const m = Math.floor(s / 60), r = s % 60;
+  return m + " min" + (r ? " " + r + " s" : "");
+}
+const minuscule = t => t.charAt(0).toLowerCase() + t.slice(1);   // "Mis en PLS" → "mis en PLS"
+const majuscule = t => t.charAt(0).toUpperCase() + t.slice(1);
+
 // Texte d'UN épisode (c = { debut, fin, observations })
-function texteEpisode(c, numero, total) {
-  const actives = c.observations.filter(o => !o.annule);   // on ignore les observations annulées
-  let txt = (total > 1 ? SCENARIO.recap.unite + " " + numero + " : d" : "D") + "ébut vers " + heure(c.debut) + ", ";
-  txt += c.fin
-    ? "fin à " + heure(c.fin) + ", durée " + formater(c.fin - c.debut) + "."
-    : "EN COURS depuis " + formater(Date.now() - c.debut) + ".";
+function texteEpisode(c) {
+  let txt = c.fin
+    ? "de " + heure(c.debut) + " à " + heure(c.fin) + " (durée " + duree(c.fin - c.debut) + ")."
+    : "en cours depuis " + duree(Date.now() - c.debut) + " (début vers " + heure(c.debut) + ").";
+  // Observations notées : on ignore celles annulées, et "SMS envoyé" (inutile dans le SMS lui-même)
+  const actives = c.observations.filter(o => !o.annule && o.obs.id !== "sms");
   if (actives.length) {
-    txt += " Observations : " + actives
-      .map(o => formater(o.t - c.debut) + " " + o.obs.fr.toLowerCase())
-      .join(" ; ") + ".";
+    txt += "\nNoté : " + actives
+      .map(o => minuscule(o.obs.fr) + " (à " + duree(o.t - c.debut) + ")")
+      .join(", ") + ".";
   }
   return txt;
 }
@@ -451,13 +466,16 @@ function texteEpisode(c, numero, total) {
 // Récap complet : tous les épisodes (les précédents + celui en cours)
 function construireRecap() {
   const tous = [...historique, { debut, fin, observations }];
-  const nom = SCENARIO.recap.nom;
-  let txt = (CONFIG.prenom ? CONFIG.prenom + " : " + nom : nom.charAt(0).toUpperCase() + nom.slice(1)) +
-    " le " + new Date(tous[0].debut).toLocaleDateString("fr-FR") + ". ";
-  if (tous.length > 1) txt += SCENARIO.recap.plusieurs(tous.length) + ". ";
-  txt += tous.map((c, i) => texteEpisode(c, i + 1, tous.length)).join(" ");
+  let txt = "[Page d'aide " + de(qui) + ", " + new Date(tous[0].debut).toLocaleDateString("fr-FR") + "]\n";
+  if (tous.length === 1) {
+    txt += majuscule(SCENARIO.recap.nom) + " " + texteEpisode(tous[0]);
+  } else {
+    txt += SCENARIO.recap.plusieurs(tous.length) + " :" +
+      tous.map((c, i) => "\n" + SCENARIO.recap.unite + " " + (i + 1) + " " + texteEpisode(c)).join("");
+  }
+  if (!fin) txt += "\nUn témoin est avec " + qui + " et suit les consignes.";
   if (position) {
-    txt += " Position : https://maps.google.com/?q=" +
+    txt += "\nPosition : https://maps.google.com/?q=" +
       position.latitude.toFixed(5) + "," + position.longitude.toFixed(5);
   }
   return txt;
