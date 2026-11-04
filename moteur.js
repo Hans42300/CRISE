@@ -638,8 +638,9 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
   navigator.serviceWorker.register("sw.js")
     .then(() => navigator.serviceWorker.ready)
     // On dit au service worker quels fichiers sont propres à CETTE page
+    // (pas de fichier profil quand le profil est dans l'adresse)
     .then(reg => reg.active.postMessage({
-      garder: ["profils/" + PROFIL + ".js", "scenarios/" + CONFIG.scenario + ".js"]
+      garder: [...(PROFIL_DANS_ADRESSE ? [] : ["profils/" + PROFIL + ".js"]), "scenarios/" + CONFIG.scenario + ".js"]
     }))
     .catch(() => {});
 }

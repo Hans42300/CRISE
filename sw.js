@@ -10,7 +10,7 @@
    ⚠ Quand tu modifies la page, change le numéro de CACHE (v3 → v4)
    pour que les téléphones remplacent bien l'ancienne copie.
    ===================================================================== */
-const CACHE = "crise-v6";
+const CACHE = "crise-v7";
 // Fichiers communs à tous les enfants, mis en mémoire dès l'installation
 const FICHIERS = ["./", "./index.html", "./moteur.js", "./manifest.webmanifest", "./icone-192.png", "./icone-512.png"];
 

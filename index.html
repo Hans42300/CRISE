@@ -204,14 +204,64 @@
   </div>
 </div>
 
-<!-- ORDRE DE CHARGEMENT
-     L'adresse choisit le profil : index.html?p=k7f3x9a2 → profils/k7f3x9a2.js
-     1. profils/xxx.js    → les réglages d'UN enfant (et le scénario choisi)
-     2. scenarios/xxx.js  → les consignes et observations de la situation
-     3. moteur.js         → le fonctionnement commun (chrono, notes, SMS, notifications…)
-     Sans ?p=… dans l'adresse, c'est le profil "demo" (aucune donnée personnelle). -->
+<!-- D'OÙ VIENT LE PROFIL DE L'ENFANT ? Trois cas, dans cet ordre :
+     A. Dans l'adresse, après le # (cas normal, fabriqué par le générateur) :
+        https://…/CRISE/#p=L%C3%A9o&g=m&t=0612345678&n=sa+maman
+        La partie après # n'est JAMAIS envoyée au serveur : le profil n'est stocké
+        nulle part sur GitHub, seulement dans le tag NFC / QR code.
+     B. Dans un fichier : index.html?p=k7f3x9a2 → profils/k7f3x9a2.js (exemple fictif)
+     C. Rien : profil "demo" (aucune donnée personnelle).
+     Ensuite : scenarios/xxx.js (les consignes), puis moteur.js (le fonctionnement). -->
 <script>
-  const PROFIL = new URLSearchParams(location.search).get("p") || "demo";
+  const parametres = new URLSearchParams(location.search);
+  let donneesProfil = new URLSearchParams(location.hash.slice(1));
+
+  /* Appli installée sur l'écran d'accueil : certains téléphones perdent la partie après #.
+     On garde donc le profil de l'appli au moment de l'installation, et on le reprend ici. */
+  const enAppli = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const CLE_PROFIL_APPLI = "crise:profil-appli";
+  try {
+    if (donneesProfil.toString() && enAppli) localStorage.setItem(CLE_PROFIL_APPLI, donneesProfil.toString());
+    if (!donneesProfil.toString() && !parametres.has("p") && enAppli) {
+      donneesProfil = new URLSearchParams(localStorage.getItem(CLE_PROFIL_APPLI) || "");
+    }
+  } catch (e) {}
+  window.addEventListener("appinstalled", () => {
+    try { if (donneesProfil.toString()) localStorage.setItem(CLE_PROFIL_APPLI, donneesProfil.toString()); } catch (e) {}
+  });
+
+  const PROFIL_DANS_ADRESSE = donneesProfil.toString() !== "";
+
+  // Si le # change alors que la page est déjà ouverte (autre tag scanné), on recharge
+  // pour afficher le bon enfant (sinon le navigateur garderait l'ancien).
+  window.addEventListener("hashchange", () => location.reload());
+
+  // Petite empreinte du profil (pour séparer les sauvegardes de deux enfants différents)
+  function empreinte(texte) {
+    let h = 5381;
+    for (const c of texte) h = (h * 33 + c.codePointAt(0)) >>> 0;
+    return h.toString(36);
+  }
+  const PROFIL = PROFIL_DANS_ADRESSE ? "adr-" + empreinte(donneesProfil.toString()) : (parametres.get("p") || "demo");
+
+  /* Profil lu dans l'adresse. Lettres courtes pour que l'adresse tienne dans un tag NFC :
+     s = situation, p = prénom, g = genre, t = téléphone, n = nom du parent,
+     c = canal ntfy, m = minutes avant l'alerte, v = vidéo (1 = oui), r = protocole */
+  function profilDepuisAdresse(d) {
+    const canal = d.get("c") || "";
+    return {
+      scenario: d.get("s") || "epilepsie",
+      prenom: (d.get("p") || "").slice(0, 40),
+      genre: d.get("g") === "f" ? "f" : "m",
+      telParent: d.get("t") || "",
+      nomParent: (d.get("n") || "").slice(0, 40),
+      protocole: d.get("r") || "",
+      seuilAlerteMin: parseInt(d.get("m"), 10) > 0 ? parseInt(d.get("m"), 10) : null,
+      consigneVideo: d.get("v") === "1",
+      // SÉCURITÉ : le canal finit dans l'adresse ntfy, on n'accepte que lettres, chiffres, - et _
+      ntfyCanal: /^[A-Za-z0-9_-]{1,64}$/.test(canal) ? canal : ""
+    };
+  }
 
   function chargerScript(adresse) {
     return new Promise((ok, echec) => {
@@ -245,9 +295,13 @@
   if (!nomValide(PROFIL)) {
     erreur("profil « " + PROFIL + " » (nom invalide)");
   } else {
-    chargerScript("profils/" + PROFIL + ".js")
+    // Cas A : profil dans l'adresse → pas de fichier à charger. Cas B et C : on charge le fichier.
+    const profilPret = PROFIL_DANS_ADRESSE
+      ? Promise.resolve(window.CONFIG = profilDepuisAdresse(donneesProfil))
+      : chargerScript("profils/" + PROFIL + ".js");
+    profilPret
       .then(() => {
-        if (typeof CONFIG === "undefined" || !nomValide(CONFIG.scenario)) throw "profils/" + PROFIL + ".js (contenu incorrect)";
+        if (typeof CONFIG === "undefined" || !nomValide(CONFIG.scenario)) throw "profil (contenu incorrect)";
         return chargerScript("scenarios/" + CONFIG.scenario + ".js");
       })
       .then(() => chargerScript("moteur.js"))
