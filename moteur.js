@@ -385,10 +385,48 @@ if (!("speechSynthesis" in window)) $("btn-voix").classList.add("cache");
 function noter(id) {
   const obs = obsParId(id);
   if (!obs) return;                                // observation absente du scénario : on ignore
-  observations.push({ obs, t: Date.now(), annule: false });
+  const o = { obs, t: Date.now(), annule: false };
+  observations.push(o);
   if (navigator.vibrate) navigator.vibrate(60);    // petite vibration de confirmation
   afficherObservations();
+  prevenirObservation(o);
 }
+
+/* =====================================================================
+   SYMPTÔMES ENVOYÉS AUX PARENTS (canal ntfy), en direct pendant la crise.
+   Pour ne pas faire sonner le téléphone à chaque appui, on REGROUPE :
+   on attend 10 s sans nouvelle note, puis un seul message part.
+   Envoi immédiat si : "15 appelé" (important), ou si la page passe en arrière-plan
+   (le témoin ouvre l'appli Téléphone…) pour ne rien perdre.
+   ===================================================================== */
+const OBS_SANS_NOTIF = ["sms", "appelParent"];   // les parents le savent déjà
+const OBS_URGENTES = ["appel15"];
+let obsEnAttente = [];
+let minuterieObs = null;
+
+function prevenirObservation(o) {
+  if (OBS_SANS_NOTIF.includes(o.obs.id)) return;
+  obsEnAttente.push(o);
+  clearTimeout(minuterieObs);
+  if (OBS_URGENTES.includes(o.obs.id)) envoyerObservations();
+  else minuterieObs = setTimeout(envoyerObservations, 10000);
+}
+
+function envoyerObservations() {
+  clearTimeout(minuterieObs);
+  const liste = obsEnAttente.filter(o => !o.annule);   // annulée entre-temps : pas envoyée
+  obsEnAttente = [];
+  if (!liste.length) return;
+  const urgent = liste.some(o => OBS_URGENTES.includes(o.obs.id));
+  notifier("Noté : " + liste.map(o => minuscule(o.obs.fr) + " (à " + duree(o.t - debut) + ")").join(", ") + ".",
+    { titre: SCENARIO.recap.unite + " " + de(qui) + " : nouvelles observations",
+      priorite: urgent ? 4 : 3, tags: urgent ? "telephone_receiver" : "memo" });
+}
+
+// Page cachée (appel en cours, autre appli…) : on envoie tout de suite ce qui attend
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") envoyerObservations();
+});
 
 $("obs-groupes").addEventListener("click", e => {
   const bouton = e.target.closest("[data-obs]");   // le bouton touché (même si on touche l'icône)
@@ -581,6 +619,7 @@ $("btn-fin").addEventListener("click", () => {
   rafraichir();
   majModeFin();
   sauver();
+  obsEnAttente = []; clearTimeout(minuterieObs);   // le récap de fin les contient déjà : pas de doublon
   notifier(construireRecap(), { titre: SCENARIO.notif.finTitre, priorite: 4, tags: "white_check_mark" });
   $("recap").scrollIntoView({ behavior: "smooth" });
 });
