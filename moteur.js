@@ -218,10 +218,9 @@ const qui = CONFIG.prenom || "l'enfant";
 });
 
 /* =====================================================================
-   LANGUE : celle du téléphone si on la connaît, sinon le français
+   LANGUE : toujours le français au départ (le témoin peut changer avec
+   les boutons EN / ES en haut de la page)
    ===================================================================== */
-const langueTel = (navigator.language || "fr").slice(0, 2);
-if (TEXTES[langueTel]) langue = langueTel;
 
 function afficherTextes() {
   const T = TEXTES[langue];
